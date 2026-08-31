@@ -1,0 +1,6 @@
+{
+  "name": "Birthday Wishes",
+  "description": "一个精美的移动端自适应“生日祝福”互动网页，包含信封点击开启惊喜、Canvas 烟花与玫瑰花瓣飘落动效、高级打字机祝福语及背景音乐。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
