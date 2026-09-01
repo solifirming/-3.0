@@ -7,4 +7,4 @@ pages_build_output_dir = "./dist"
 # 卡片数据存储 KV（GitHub Actions 首次部署时自动创建并替换 id）
 [[kv_namespaces]]
 binding = "CARDS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "37436620dc604874afb9b39e9884bcce"
