@@ -110,7 +110,7 @@ export default function App() {
 
     fetch(`/api/cards/${cardId}`)
       .then(res => res.json())
-      .then(data => {
+      .then((data: any) => {
         if (data && data.success && data.card) {
           if (data.card.name) {
             setBirthdayName(data.card.name);
