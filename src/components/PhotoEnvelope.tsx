@@ -76,7 +76,7 @@ export default function PhotoEnvelope({
 
     fetch(fetchUrl)
       .then(res => res.json())
-      .then(data => {
+      .then((data: any) => {
         if (data && data.success && data.card && Array.isArray(data.card.photos)) {
           const freshPhotos = sanitizePhotos(data.card.photos);
           setPhotos(freshPhotos);
