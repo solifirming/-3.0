@@ -1,0 +1,52 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Ensure KV namespace
+        run: |
+          set -e
+          KV_ID=""
+          if npx wrangler@latest kv namespace list --json > /tmp/kv.json 2>/dev/null; then
+            KV_ID=$(python3 -c "import json; d=json.load(open('/tmp/kv.json')); print(next((x['id'] for x in d['result'] if x.get('title') == 'CARDS'), ''))")
+          fi
+          if [ -z "$KV_ID" ]; then
+            npx wrangler@latest kv namespace create CARDS --json > /tmp/kvnew.json
+            KV_ID=$(python3 -c "import json; d=json.load(open('/tmp/kvnew.json')); print(d['result']['id'])")
+          fi
+          sed -i "s|REPLACE_WITH_KV_NAMESPACE_ID|$KV_ID|" wrangler.toml
+          echo "KV namespace id: $KV_ID"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler@latest pages deploy dist --project-name=birthday-wishes --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

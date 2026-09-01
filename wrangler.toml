@@ -1,0 +1,10 @@
+# Cloudflare Pages 项目配置
+# 部署命令: npx wrangler pages deploy dist --project-name=birthday-wishes
+name = "birthday-wishes"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "./dist"
+
+# 卡片数据存储 KV（GitHub Actions 首次部署时自动创建并替换 id）
+[[kv_namespaces]]
+binding = "CARDS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
