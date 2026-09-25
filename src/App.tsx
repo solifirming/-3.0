@@ -121,7 +121,7 @@ export default function App() {
       if (Array.isArray(card.wishes) && card.wishes.length > 0) {
         setWishesList(card.wishes);
       }
-      if (Array.isArray(card.photos) && card.photos.length > 0) {
+      if (Array.isArray(card.photos)) {
         setPhotos(card.photos);
       }
     };

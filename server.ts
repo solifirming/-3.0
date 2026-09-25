@@ -83,6 +83,15 @@ app.get('/api/cards/:id', (req, res) => {
   res.json({ success: true, card });
 });
 
+app.get('/api/download-zip', (req, res) => {
+  const zipPath = path.join(process.cwd(), 'birthday_wishes_code.zip');
+  if (fs.existsSync(zipPath)) {
+    res.download(zipPath, 'birthday-wishes-project.zip');
+  } else {
+    res.status(404).send('Zip file not ready yet');
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

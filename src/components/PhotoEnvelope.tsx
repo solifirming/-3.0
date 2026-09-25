@@ -43,6 +43,7 @@ export default function PhotoEnvelope({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
   const [saveToast, setSaveToast] = useState<string>('');
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   const isSharedView = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('shared') === '1';
 
@@ -83,6 +84,12 @@ export default function PhotoEnvelope({
           next = photos.map((p, idx) => (idx === index ? { ...p, url: resultUrl, isCustomCover: true } : p));
         }
 
+        // Reset broken state for this index
+        if (index !== -1 && photos[index]) {
+          const pId = photos[index].id || index;
+          setBrokenImages(prev => ({ ...prev, [pId]: false }));
+        }
+
         // 1. Update state
         onPhotosChange(next);
 
@@ -114,14 +121,17 @@ export default function PhotoEnvelope({
     }
   };
 
-  const handleDeletePhoto = (index: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeletePhoto = (index: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     playClickSound();
-    if (photos.length <= 1) return;
 
     const next = photos.filter((_, idx) => idx !== index);
     if (selectedPhotoIndex === index) {
-      setSelectedPhotoIndex(null);
+      if (next.length === 0) {
+        setSelectedPhotoIndex(null);
+      } else {
+        setSelectedPhotoIndex(Math.min(index, next.length - 1));
+      }
     } else if (selectedPhotoIndex !== null && selectedPhotoIndex > index) {
       setSelectedPhotoIndex(selectedPhotoIndex - 1);
     }
@@ -139,6 +149,7 @@ export default function PhotoEnvelope({
   const handleResetPhotos = (e: React.MouseEvent) => {
     e.stopPropagation();
     playClickSound();
+    setBrokenImages({});
     onPhotosChange(DEFAULT_MEMORY_PHOTOS);
     saveCardToLocal(cardId, { id: cardId, photos: DEFAULT_MEMORY_PHOTOS });
     fetch('/api/cards', {
@@ -157,15 +168,20 @@ export default function PhotoEnvelope({
 
   // Helper to render photo content
   const renderPhotoContent = (photo: MemoryPhoto, index: number) => {
+    const photoKey = photo.id || index;
+    const isBroken = brokenImages[photoKey];
     const photoUrl = photo.url;
 
-    if (photoUrl) {
+    if (photoUrl && !isBroken) {
       return (
         <img
           src={photoUrl}
           alt={photo.title}
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover"
+          onError={() => {
+            setBrokenImages((prev) => ({ ...prev, [photoKey]: true }));
+          }}
         />
       );
     }
@@ -347,14 +363,14 @@ export default function PhotoEnvelope({
                       <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-7 h-3 bg-[#FF8FA3]/80 border border-white skew-x-12 z-10" />
 
                       {/* Delete Button */}
-                      {!isSharedView && photos.length > 1 && (
+                      {!isSharedView && (
                         <button
                           type="button"
                           onClick={(e) => handleDeletePhoto(index, e)}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-[#25103D] border-2 border-[#FFE8F5] text-[#FFE8F5] flex items-center justify-center cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D] z-20 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-[#25103D] border-2 border-[#FFE8F5] text-[#FFE8F5] flex items-center justify-center cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D] z-20 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 transition-opacity shadow"
                           title="删除此照片"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       )}
 
@@ -362,8 +378,8 @@ export default function PhotoEnvelope({
                       <div className="relative w-full aspect-square bg-[#221033] border border-stone-300 overflow-hidden flex items-center justify-center">
                         {renderPhotoContent(photo, index)}
 
-                        {/* Hover Quick Zoom / Replace Overlay */}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        {/* Hover Quick Zoom / Replace / Delete Overlay */}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -371,7 +387,7 @@ export default function PhotoEnvelope({
                               playClickSound();
                               setSelectedPhotoIndex(index);
                             }}
-                            className="p-1.5 bg-[#FF8FA3] border border-white text-white text-[9px] font-pixel flex items-center gap-1 cursor-pointer hover:bg-white hover:text-black"
+                            className="p-1.5 bg-[#FF8FA3] border border-white text-white text-[9px] font-pixel flex items-center gap-0.5 cursor-pointer hover:bg-white hover:text-black"
                             title="查看大图"
                           >
                             <Eye className="w-3 h-3" />
@@ -382,27 +398,51 @@ export default function PhotoEnvelope({
                             <button
                               type="button"
                               onClick={(e) => triggerUploadFor(index, e)}
-                              className="p-1.5 bg-[#7B5EA7] border border-white text-white text-[9px] font-pixel flex items-center gap-1 cursor-pointer hover:bg-white hover:text-black"
+                              className="p-1.5 bg-[#7B5EA7] border border-white text-white text-[9px] font-pixel flex items-center gap-0.5 cursor-pointer hover:bg-white hover:text-black"
                               title="更换图片"
                             >
                               <Upload className="w-3 h-3" />
                               <span>更换</span>
                             </button>
                           )}
+
+                          {!isSharedView && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeletePhoto(index, e)}
+                              className="p-1.5 bg-[#25103D] border border-[#FF8FA3] text-[#FF8FA3] text-[9px] font-pixel flex items-center gap-0.5 cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D]"
+                              title="删除此照片"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>删除</span>
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Polaroid Caption / Replace Button for Touch Devices */}
+                      {/* Polaroid Caption / Replace & Delete Buttons */}
                       <div className="w-full text-center flex flex-col items-center pt-0.5">
                         {!isSharedView ? (
-                          <button
-                            type="button"
-                            onClick={(e) => triggerUploadFor(index, e)}
-                            className="mt-1 w-full py-1 bg-[#7B5EA7] border border-[#FFE8F5] text-white text-[8.5px] font-pixel flex items-center justify-center gap-1 hover:bg-[#FF8FA3] hover:text-[#200A38] transition-colors cursor-pointer"
-                          >
-                            <Upload className="w-2.5 h-2.5" />
-                            <span>更换此照片</span>
-                          </button>
+                          <div className="mt-1 w-full flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => triggerUploadFor(index, e)}
+                              className="flex-1 py-1 bg-[#7B5EA7] border border-[#FFE8F5] text-white text-[8.5px] font-pixel flex items-center justify-center gap-1 hover:bg-[#FF8FA3] hover:text-[#200A38] transition-colors cursor-pointer"
+                              title="更换此照片"
+                            >
+                              <Upload className="w-2.5 h-2.5" />
+                              <span>更换</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeletePhoto(index, e)}
+                              className="px-2 py-1 bg-[#25103D] border border-[#FF8FA3] text-[#FF8FA3] text-[8.5px] font-pixel flex items-center justify-center gap-0.5 hover:bg-[#FF8FA3] hover:text-[#25103D] transition-colors cursor-pointer"
+                              title="删除此照片"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                              <span>删除</span>
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-[9px] font-pixel text-[#24133c] font-bold py-0.5 truncate max-w-full">
                             {photo.title || `回忆 #${index + 1}`}
@@ -412,6 +452,18 @@ export default function PhotoEnvelope({
                     </motion.div>
                   );
                 })}
+
+                {/* Empty State when no photos left */}
+                {photos.length === 0 && (
+                  <div className="w-full max-w-[280px] p-4 bg-[#25103D]/80 border-2 border-dashed border-[#7B5EA7] flex flex-col items-center text-center gap-2 my-2">
+                    <p className="text-[10.5px] text-[#FFE8F5] font-pixel font-bold">
+                      📷 目前没有相片
+                    </p>
+                    <p className="text-[9px] text-[#C9A9E9] font-pixel leading-relaxed">
+                      您可以点击右侧「添加新照片」上传专属回忆，或随时点击下方「恢复预设插画」。
+                    </p>
+                  </div>
+                )}
 
                 {/* Add New Photo Button */}
                 {!isSharedView && (
@@ -495,51 +547,61 @@ export default function PhotoEnvelope({
 
               {/* Modal Actions & Nav Controls */}
               <div className="w-full flex justify-between items-center mt-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    playClickSound();
-                    setSelectedPhotoIndex((prev) => (prev === null || prev === 0 ? photos.length - 1 : prev - 1));
-                  }}
-                  className="px-3 py-1.5 bg-[#7B5EA7] border-2 border-[#FFE8F5] text-[#FFE8F5] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#8D6CAB]"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>上一张</span>
-                </button>
-
-                {!isSharedView && (
+                {photos.length > 1 ? (
                   <button
                     type="button"
-                    onClick={(e) => triggerUploadFor(selectedPhotoIndex, e)}
-                    className="px-3 py-1.5 bg-[#FF8FA3] border-2 border-[#FFE8F5] text-[#24133c] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-white"
+                    onClick={() => {
+                      playClickSound();
+                      setSelectedPhotoIndex((prev) => (prev === null || prev === 0 ? photos.length - 1 : prev - 1));
+                    }}
+                    className="px-3 py-1.5 bg-[#7B5EA7] border-2 border-[#FFE8F5] text-[#FFE8F5] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#8D6CAB]"
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>上传替换</span>
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>上一张</span>
                   </button>
+                ) : (
+                  <div className="w-16" />
                 )}
 
-                {!isSharedView && (
+                <div className="flex items-center gap-2">
+                  {!isSharedView && (
+                    <button
+                      type="button"
+                      onClick={(e) => triggerUploadFor(selectedPhotoIndex, e)}
+                      className="px-3 py-1.5 bg-[#FF8FA3] border-2 border-[#FFE8F5] text-[#24133c] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-white"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>上传替换</span>
+                    </button>
+                  )}
+
+                  {!isSharedView && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeletePhoto(selectedPhotoIndex, e)}
+                      className="px-3 py-1.5 bg-[#25103D] border-2 border-[#FF8FA3] text-[#FF8FA3] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>删除</span>
+                    </button>
+                  )}
+                </div>
+
+                {photos.length > 1 ? (
                   <button
                     type="button"
-                    onClick={(e) => handleDeletePhoto(selectedPhotoIndex, e)}
-                    className="px-3 py-1.5 bg-[#25103D] border-2 border-[#FF8FA3] text-[#FF8FA3] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D]"
+                    onClick={() => {
+                      playClickSound();
+                      setSelectedPhotoIndex((prev) => (prev === null || prev === photos.length - 1 ? 0 : prev + 1));
+                    }}
+                    className="px-3 py-1.5 bg-[#7B5EA7] border-2 border-[#FFE8F5] text-[#FFE8F5] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#8D6CAB]"
                   >
-                    <X className="w-3.5 h-3.5" />
-                    <span>删除</span>
+                    <span>下一张</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </button>
+                ) : (
+                  <div className="w-16" />
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    playClickSound();
-                    setSelectedPhotoIndex((prev) => (prev === null || prev === photos.length - 1 ? 0 : prev + 1));
-                  }}
-                  className="px-3 py-1.5 bg-[#7B5EA7] border-2 border-[#FFE8F5] text-[#FFE8F5] text-[10px] font-pixel font-bold flex items-center gap-1 cursor-pointer hover:bg-[#8D6CAB]"
-                >
-                  <span>下一张</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
               </div>
             </motion.div>
           </div>
