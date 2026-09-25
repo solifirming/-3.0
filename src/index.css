@@ -1,0 +1,157 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DotGothic16&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Fonts */
+  --font-pixel: "DotGothic16", "Press Start 2P", monospace;
+  --font-english: "Press Start 2P", monospace;
+
+  /* Custom Animations */
+  --animate-pixel-blink: pixel-blink 0.8s infinite step-start;
+  --animate-pixel-wiggle: pixel-wiggle 0.6s infinite ease-in-out;
+  --animate-spin-slow: spin 12s linear infinite;
+  
+  --animate-shimmer: shimmer 2.2s infinite linear;
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  --animate-audio-bar-1: audio-jump-1 0.5s infinite steps(4, end) alternate;
+  --animate-audio-bar-2: audio-jump-2 0.7s infinite steps(4, end) alternate;
+  --animate-audio-bar-3: audio-jump-3 0.8s infinite steps(4, end) alternate;
+  
+  @keyframes audio-jump-1 {
+    0% { transform: scaleY(0.2); }
+    100% { transform: scaleY(0.9); }
+  }
+  @keyframes audio-jump-2 {
+    0% { transform: scaleY(0.4); }
+    100% { transform: scaleY(1.0); }
+  }
+  @keyframes audio-jump-3 {
+    0% { transform: scaleY(0.3); }
+    100% { transform: scaleY(0.85); }
+  }
+
+  @keyframes pixel-blink {
+    50% { opacity: 0; }
+  }
+
+  @keyframes pixel-wiggle {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-2px) rotate(-1.5deg); }
+    75% { transform: translateY(-1px) rotate(1.5deg); }
+  }
+
+  /* Custom Shadows & Glow */
+  --shadow-pixel-glow: 0 4px 0 rgba(0, 0, 0, 0.3), 0 0 10px rgba(245, 198, 234, 0.45);
+  --shadow-button-pixel: 0 4px 0px #7b5ea7;
+}
+
+/* Base resets & tweaks for smooth mobile rendering */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #31184a; /* Much brighter, deeper lavender chocolate cosmic sky */
+  color: #FFE8F5; /* Soft warm pink-white */
+  font-family: "DotGothic16", "Press Start 2P", monospace;
+  -webkit-tap-highlight-color: transparent;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  
+  /* Exquisite pixel star custom cursor */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M7 0h2v2H7V0zm0 14h2v2H7v-2zm-7-7h2v2H0V7zm14 0h2v2h-2V7zM3 3h2v2H3V3zm8 0h2v2h-2V3zm0 8h2v2h-2v-2zM3 11h2v2H3v-2zm4-4h2v2H7V7z' fill='%23FFE8F5'/%3E%3C/svg%3E") 8 8, auto;
+}
+
+/* Ensure form elements and content tags inherit the custom pixel font naturally, without destroying width/height and layout structures */
+input, textarea, button, select, option, label {
+  font-family: "DotGothic16", "Press Start 2P", monospace;
+}
+
+/* Custom balloon-drift and jump animations */
+@keyframes balloon-drift-1 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(3deg); }
+  100% { transform: translateY(-4px) rotate(-3deg); }
+}
+
+@keyframes balloon-drift-2 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-16px) rotate(-4deg); }
+  100% { transform: translateY(-6px) rotate(4deg); }
+}
+
+@keyframes pixel-bounce {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  45% { transform: translateY(-6px) scaleY(1.05); }
+  90% { transform: translateY(1px) scaleY(0.95); }
+}
+
+@keyframes wave-arm {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(20deg); }
+}
+
+.animate-balloon-1 {
+  animation: balloon-drift-1 6s infinite ease-in-out alternate;
+}
+
+.animate-balloon-2 {
+  animation: balloon-drift-2 8s infinite ease-in-out alternate;
+}
+
+.animate-pixel-bounce {
+  animation: pixel-bounce 1s infinite ease-in-out;
+}
+
+.animate-wave-arm {
+  transform-origin: bottom center;
+  animation: wave-arm 0.8s infinite ease-in-out;
+}
+
+/* Scrollbars customized to pixelated box */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #11071c;
+}
+::-webkit-scrollbar-thumb {
+  background: #7B5EA7;
+  border: 2px solid #11071c;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A9E9;
+}
+
+/* Custom retro border boxes */
+.pixel-border-retro {
+  border: 4px solid #FFE8F5;
+  box-shadow: 
+    0 4px 0 rgba(0, 0, 0, 0.3),
+    inset -4px -4px 0px rgba(0,0,0,0.15);
+}
+
+.pixel-border-inner {
+  border: 2px solid #C9A9E9;
+}
+
+/* Custom typewriter typing effect cursor styling */
+.typing-cursor::after {
+  content: '■';
+  color: #F5C6EA;
+  font-weight: bold;
+  display: inline-block;
+  margin-left: 2px;
+  animation: pixel-blink 0.8s infinite step-start;
+}
+
+/* Retro sparkle list block */
+.blink-text-highlight {
+  animation: pixel-blink 1.2s infinite step-start;
+  color: #F5C6EA;
+}
