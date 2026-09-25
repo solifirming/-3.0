@@ -72,6 +72,8 @@ export async function saveCardToLocal(cardId: string, data: any): Promise<void> 
  * Load card data from IndexedDB or localStorage
  */
 export async function loadCardFromLocal(cardId: string): Promise<any | null> {
+  if (!cardId) return null;
+
   // 1. Try IndexedDB first (most complete, contains full photos)
   try {
     const db = await openDB();
@@ -85,32 +87,37 @@ export async function loadCardFromLocal(cardId: string): Promise<any | null> {
       });
       if (card) return card;
 
-      // Fallback: try latest in IndexedDB
-      const latest = await new Promise<any>((resolve) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get('latest');
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
-      });
-      if (latest) return latest;
+      // Only fallback to 'latest' if cardId itself was 'latest'
+      if (cardId === 'latest') {
+        const latest = await new Promise<any>((resolve) => {
+          const tx = db.transaction(STORE_NAME, 'readonly');
+          const store = tx.objectStore(STORE_NAME);
+          const req = store.get('latest');
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+        if (latest) return latest;
+      }
     }
   } catch (err) {
     console.warn('IndexedDB read error:', err);
   }
 
-  // 2. Fallback to localStorage
+  // 2. Fallback to localStorage for this specific cardId
   try {
-    const saved = localStorage.getItem(`pixel_birthday_cache_${cardId}`) ||
-                  localStorage.getItem('pixel_birthday_cache_latest') ||
-                  localStorage.getItem(`pixel_birthday_user_photos_v2_${cardId}`) ||
-                  localStorage.getItem('pixel_birthday_user_photos_v2');
+    const saved = localStorage.getItem(`pixel_birthday_cache_${cardId}`);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
         return { photos: parsed };
       }
       return parsed;
+    }
+    if (cardId === 'latest') {
+      const latestSaved = localStorage.getItem('pixel_birthday_cache_latest');
+      if (latestSaved) {
+        return JSON.parse(latestSaved);
+      }
     }
   } catch (e) {
     console.warn('localStorage read error:', e);

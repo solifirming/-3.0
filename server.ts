@@ -31,8 +31,6 @@ function loadCardsDB(): Record<string, any> {
 function saveCardsDB(db: Record<string, any>) {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
-    const SEED_FILE = path.join(process.cwd(), 'src', 'data', 'seedCards.json');
-    fs.writeFileSync(SEED_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error writing cards DB:', err);
   }
@@ -79,17 +77,8 @@ app.get('/api/cards/latest', (req, res) => {
 app.get('/api/cards/:id', (req, res) => {
   const { id } = req.params;
   const db = loadCardsDB();
-  const card = db[id] || db['latest'] || null;
+  const card = db[id] || null;
   res.json({ success: true, card });
-});
-
-app.get('/api/download-zip', (req, res) => {
-  const zipPath = path.join(process.cwd(), 'birthday_wishes_code.zip');
-  if (fs.existsSync(zipPath)) {
-    res.download(zipPath, 'birthday-wishes-project.zip');
-  } else {
-    res.status(404).send('Zip file not ready yet');
-  }
 });
 
 async function startServer() {

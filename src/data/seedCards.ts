@@ -6,7 +6,7 @@
 import seedCardsData from './seedCards.json';
 
 export function getSeedCard(cardId: string): any {
-  if (!cardId) return null;
+  if (!cardId || cardId === 'latest') return null;
   const db = seedCardsData as Record<string, any>;
-  return db[cardId] || db['latest'] || null;
+  return db[cardId] || null;
 }

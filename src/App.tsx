@@ -77,7 +77,12 @@ export default function App() {
   const [birthdayAge, setBirthdayAge] = useState(() => seedCard?.age || 18);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(() => seedCard?.name || '最特别的孩子');
-  const [photos, setPhotos] = useState<MemoryPhoto[]>(() => seedCard?.photos || DEFAULT_MEMORY_PHOTOS);
+  const [photos, setPhotos] = useState<MemoryPhoto[]>(() => {
+    if (seedCard && Array.isArray(seedCard.photos)) {
+      return seedCard.photos;
+    }
+    return [];
+  });
 
   const isFirstRender = useRef(true);
   const hasFetchedInitialData = useRef(false);

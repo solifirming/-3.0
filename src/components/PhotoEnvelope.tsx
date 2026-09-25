@@ -176,7 +176,7 @@ export default function PhotoEnvelope({
       return (
         <img
           src={photoUrl}
-          alt={photo.title}
+          alt=""
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover"
           onError={() => {
@@ -420,9 +420,9 @@ export default function PhotoEnvelope({
                         </div>
                       </div>
 
-                      {/* Polaroid Caption / Replace & Delete Buttons */}
-                      <div className="w-full text-center flex flex-col items-center pt-0.5">
-                        {!isSharedView ? (
+                      {/* Polaroid Bottom - No text whatsoever */}
+                      {!isSharedView ? (
+                        <div className="w-full text-center flex flex-col items-center pt-0.5">
                           <div className="mt-1 w-full flex items-center gap-1">
                             <button
                               type="button"
@@ -443,24 +443,24 @@ export default function PhotoEnvelope({
                               <span>删除</span>
                             </button>
                           </div>
-                        ) : (
-                          <span className="text-[9px] font-pixel text-[#24133c] font-bold py-0.5 truncate max-w-full">
-                            {photo.title || `回忆 #${index + 1}`}
-                          </span>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-1.5" />
+                      )}
                     </motion.div>
                   );
                 })}
 
-                {/* Empty State when no photos left */}
+                {/* Empty State when no photos */}
                 {photos.length === 0 && (
                   <div className="w-full max-w-[280px] p-4 bg-[#25103D]/80 border-2 border-dashed border-[#7B5EA7] flex flex-col items-center text-center gap-2 my-2">
                     <p className="text-[10.5px] text-[#FFE8F5] font-pixel font-bold">
                       📷 目前没有相片
                     </p>
                     <p className="text-[9px] text-[#C9A9E9] font-pixel leading-relaxed">
-                      您可以点击右侧「添加新照片」上传专属回忆，或随时点击下方「恢复预设插画」。
+                      {isSharedView
+                        ? "信封里静悄悄的，暂未放入相片回忆。"
+                        : "您可以点击右侧「添加新照片」上传专属回忆，或随时点击下方「恢复预设插画」。"}
                     </p>
                   </div>
                 )}
