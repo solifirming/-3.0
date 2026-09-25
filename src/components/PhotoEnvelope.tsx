@@ -45,7 +45,7 @@ export default function PhotoEnvelope({
   const [saveToast, setSaveToast] = useState<string>('');
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
-  const isSharedView = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('shared') === '1';
+  const isSharedView = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('shared') === '1' || new URLSearchParams(window.location.search).get('s') === '1');
 
   const showToast = (msg: string) => {
     setSaveToast(msg);

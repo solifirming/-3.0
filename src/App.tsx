@@ -64,10 +64,10 @@ export default function App() {
   const [currentCardId, setCurrentCardId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      const paramId = urlParams.get('card');
+      const paramId = urlParams.get('c') || urlParams.get('card');
       if (paramId) return paramId;
     }
-    return `card_${Date.now()}`;
+    return `c_${Date.now().toString(36)}`;
   });
 
   const seedCard = getSeedCard(currentCardId);
@@ -85,11 +85,11 @@ export default function App() {
   // Load saved card data from local storage (IndexedDB + localStorage) and server on initial mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const cardId = urlParams.get('card') || 'latest';
+    const cardId = urlParams.get('c') || urlParams.get('card') || 'latest';
 
-    if (!urlParams.get('card')) {
+    if (!urlParams.get('c') && !urlParams.get('card')) {
       try {
-        window.history.replaceState({}, '', `?card=${currentCardId}`);
+        window.history.replaceState({}, '', `?c=${currentCardId}`);
       } catch {}
     }
 
@@ -164,7 +164,7 @@ export default function App() {
           if (fallback) {
             applyCardData(fallback);
             saveCardToLocal(currentCardId, fallback);
-          } else if (!urlParams.get('card')) {
+          } else if (!urlParams.get('c') && !urlParams.get('card')) {
             fetch('/api/cards/latest')
               .then(r => r.json())
               .then((latestData: any) => {
@@ -221,7 +221,7 @@ export default function App() {
     copied: false
   });
   
-  const isSharedView = new URLSearchParams(window.location.search).get('shared') === '1';
+  const isSharedView = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('shared') === '1' || new URLSearchParams(window.location.search).get('s') === '1');
 
   // Making individual wishes variables
   const [userWish, setUserWish] = useState('');
@@ -319,35 +319,8 @@ export default function App() {
     playClickSound();
     
     const cardId = currentCardId;
-    let shareUrl = `${window.location.origin}${window.location.pathname}?card=${cardId}&shared=1`;
-    try {
-      const compactPayload: Record<string, any> = {
-        name: birthdayName,
-        age: birthdayAge,
-        themeIndex: selectedThemeIndex,
-        wishes: wishesList,
-        activeMascotId,
-        mascotConfig,
-        customTitle,
-        customParagraphs,
-        customSignature,
-        customDate,
-      };
-      if (Array.isArray(photos)) {
-        const compactPhotos = photos.map(p => ({
-          id: p.id,
-          title: p.title,
-          url: p.url && p.url.startsWith('data:') && p.url.length > 3000 ? '' : p.url
-        })).filter(p => p.url);
-        if (compactPhotos.length > 0) compactPayload.photos = compactPhotos;
-      }
-      const encodedData = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(compactPayload)))));
-      if (encodedData.length < 2500) {
-        shareUrl += `&d=${encodedData}`;
-      }
-    } catch {
-      /* fallback to standard url */
-    }
+    // Short, elegant, concise share URL without bulky encoded payload
+    const shareUrl = `${window.location.origin}${window.location.pathname}?c=${cardId}&s=1`;
 
     let isCopied = false;
     if (navigator.clipboard && navigator.clipboard.writeText) {

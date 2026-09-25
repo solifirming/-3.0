@@ -1,8 +1,12 @@
-import rawCards from './seedCards.json';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-export const SEED_CARDS: Record<string, any> = rawCards || {};
+import seedCardsData from './seedCards.json';
 
 export function getSeedCard(cardId: string): any {
   if (!cardId) return null;
-  return SEED_CARDS[cardId] || SEED_CARDS['latest'] || null;
+  const db = seedCardsData as Record<string, any>;
+  return db[cardId] || db['latest'] || null;
 }
