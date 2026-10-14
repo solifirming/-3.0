@@ -70,7 +70,7 @@ test('Vercel 保存、指定卡片和最近卡片读取，零张相片保持为�
 });
 
 test('缺少数据库配置时返回失败，不伪造本地保存为云端成功', async () => {
-  const names=['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN','KV_REST_API_URL','KV_REST_API_TOKEN'];
+  const names=['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN','KV_REST_API_URL','KV_REST_API_TOKEN','BLOB_STORE_ID','BLOB_READ_WRITE_TOKEN'];
   const previous=names.map(name=>process.env[name]);
   names.forEach(name=>delete process.env[name]);
   try {

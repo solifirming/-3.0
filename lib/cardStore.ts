@@ -1,9 +1,15 @@
+import { createBlobStorage } from './blobStore.js';
+
 export type Card = Record<string, any>;
 export type ApiRequest = { method?: string; body?: unknown; query?: Record<string, string | string[] | undefined>; headers?: Record<string, string | string[] | undefined> };
 export type ApiResponse = { status(code: number): ApiResponse; setHeader(name: string, value: string): void; json(value: unknown): void };
 export const MAX_CARD_BYTES = 900_000;
 const prefix = 'birthday-v3:card:';
 export const validId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(id);
+const blobStorage = createBlobStorage();
+const hasRedis = () => !!((process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+  (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN));
+const hasBlob = () => !!(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
 
 export class StorageError extends Error {
   constructor(message: string, public status = 503) { super(message); }
@@ -39,6 +45,11 @@ async function redis(commands: unknown[], transaction = false): Promise<any> {
 }
 
 export async function readCard(id: string): Promise<Card | null> {
+  if (!hasRedis()) {
+    if (!hasBlob()) throw new StorageError('云端存储尚未配置，请连接私有 Blob 或 Redis 后重新部署');
+    try { return await blobStorage.read(id); }
+    catch { throw new StorageError('云端存储读取失败，请检查连接后重试'); }
+  }
   const raw = await redis(['GET', prefix + id]);
   if (raw === null) return null;
   let value: any;
@@ -53,6 +64,11 @@ export async function readCard(id: string): Promise<Card | null> {
 export async function writeCard(card: Card): Promise<void> {
   const serialized = JSON.stringify(card);
   if (Buffer.byteLength(serialized, 'utf8') > MAX_CARD_BYTES) throw new StorageError('照片总大小超出限制，请压缩图片后重试', 413);
+  if (!hasRedis()) {
+    if (!hasBlob()) throw new StorageError('云端存储尚未配置，请连接私有 Blob 或 Redis 后重新部署');
+    try { await blobStorage.write(card); return; }
+    catch { throw new StorageError('云端存储未确认保存成功，请重试'); }
+  }
   await redis([['SET', prefix + card.id, serialized], ['SET', prefix + 'latest', card.id]], true);
 }
 

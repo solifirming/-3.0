@@ -7,6 +7,10 @@
 4. 提交到 Vercel 正在使用的分支。
 
 ## 云端存储（必须配置）
+推荐给此项目创建并连接独立的 **Private Vercel Blob**。代码支持 OIDC 的 BLOB_STORE_ID，也兼容 BLOB_READ_WRITE_TOKEN；使用平台连接自动注入即可，不在聊天或仓库里手动记录值。连接后需要重新部署，私有 Blob 的读取会绕过存储层 CDN 缓存。
+
+也可以使用原约定的 Redis 方案。若配置了完整 Redis 连接，代码优先使用 Redis，避免改用 Blob 后遗漏已有 Redis 数据。
+
 在 Vercel 打开第二个网站项目 → Storage → 创建或连接 Upstash Redis 数据库，并连接到此项目的 Production 环境。
 如果连接后没有自动出现所需变量，在项目 Settings → Environment Variables 添加：
 - UPSTASH_REDIS_REST_URL：数据库的 REST URL。
@@ -33,7 +37,7 @@ Root Directory: 包含 package.json 和 api 的仓库根目录
 6. 再次 Redeploy 后打开该链接，确认持久化有效。
 
 ## 修复内容与限制
-- 新增 Vercel API 和 Redis 持久化，构建不再把 server.cjs 放进静态输出。
+- 新增 Vercel API，支持私有 Blob 或 Redis 持久化；后端文件不依赖本地 server.cjs。
 - 保存检查 HTTP 状态和 success；云端失败显示原因，本机备份继续保留。
 - 自动保存延迟 800ms；保存请求排队，分享等待云端确认；剪贴板等待真实完成。
 - 单张卡片 JSON 上限约 900KB（包含照片的 Base64），超过时明确提示；大量照片需要后续迁移到对象存储。
