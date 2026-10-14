@@ -57,46 +57,5 @@ export const DEFAULT_BIRTHDAY_IMAGE = 'https://images.unsplash.com/photo-1513201
 export const BACKGROUND_MUSIC_URL = 'https://pub-c5e31b5cdafb419a991161d10c2771a0.r2.dev/happy-birthday-piano.mp3';
 export const CLICK_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav';
 
-export const DEFAULT_MEMORY_PHOTOS = [
-  {
-    id: 'chapter-22',
-    title: 'Chapter 22',
-    subtitle: 'HAPPY BIRTHDAY 🎂',
-    url: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?w=800&auto=format&fit=crop&q=80',
-    date: '2026.08.08',
-    description: '解锁第 22 岁专属像素贺卡！愿新的一岁充满惊喜与无限快乐。',
-    isCustomCover: true
-  },
-  {
-    id: 'photo-snow',
-    title: '飘雪微醺 ❄️',
-    subtitle: '初冬第一场雪',
-    url: 'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?w=800&auto=format&fit=crop&q=80',
-    date: '2026.12.24',
-    description: '在漫天飞舞的轻盈雪花中，系着围巾笑颜如花，将这份纯粹的温暖定格。'
-  },
-  {
-    id: 'photo-bookstore',
-    title: '静谧书香 📚',
-    subtitle: '漫步画册角落',
-    url: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800&auto=format&fit=crop&q=80',
-    date: '2026.11.15',
-    description: '倚靠在沉静温润的书架旁，翻阅着艺术画册，享受时光静静流淌的沉醉。'
-  },
-  {
-    id: 'photo-cake',
-    title: '草莓甜心 🍰',
-    subtitle: '眨眼许下心愿',
-    url: 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?w=800&auto=format&fit=crop&q=80',
-    date: '2026.08.08',
-    description: '手拿小草莓与美味蛋糕，俏皮地眨一眨眼，把所有甜美与好运通通收进心底。'
-  },
-  {
-    id: 'photo-lights',
-    title: '璀璨星光 ✨',
-    subtitle: '眼神自带光芒',
-    url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=800&auto=format&fit=crop&q=80',
-    date: '2026.10.01',
-    description: '夜色渐浓，繁星与微光在眼眸深处流动，比所有的灯火都更加耀眼与浪漫。'
-  }
-];
+// 相片信封默认留空，由用户批量添加。
+export const DEFAULT_MEMORY_PHOTOS = [];

@@ -7,8 +7,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, Sparkles, X, ChevronLeft, ChevronRight, Upload, RotateCcw, Eye, Plus, Check, RefreshCw } from 'lucide-react';
 import { MemoryPhoto } from '../types';
-import { DEFAULT_MEMORY_PHOTOS } from '../data';
-import { compressImageFile, saveCardToLocal } from '../utils/storage';
+import { compressImageFile } from '../utils/storage';
 import {
   Photo1Chapter22,
   Photo2SnowGirl,
@@ -22,7 +21,9 @@ interface PhotoEnvelopeProps {
   birthdayAge: number;
   photos: MemoryPhoto[];
   onPhotosChange: (newPhotos: MemoryPhoto[]) => void;
-  cardId: string;
+  disabled: boolean;
+  onUploadingChange: (uploading: boolean) => void;
+  photoSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   playClickSound: () => void;
   wishesList?: string[];
   selectedThemeIndex?: number;
@@ -33,7 +34,7 @@ export default function PhotoEnvelope({
   birthdayAge,
   photos,
   onPhotosChange,
-  cardId,
+  disabled, onUploadingChange, photoSaveStatus,
   playClickSound,
   wishesList = [],
   selectedThemeIndex = 0
@@ -43,6 +44,7 @@ export default function PhotoEnvelope({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
   const [saveToast, setSaveToast] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   const isSharedView = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('shared') === '1' || new URLSearchParams(window.location.search).get('s') === '1');
@@ -54,68 +56,34 @@ export default function PhotoEnvelope({
     }, 3500);
   };
 
-  // Upload and compress image
+  // 整批按选择顺序处理，一次更新；保存由父组件统一执行。
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    playClickSound();
-    showToast('⏳ 正在压缩图片并保存...');
-
+    const files = Array.from(e.target.files || []) as File[];
+    e.target.value = '';
+    if (!files.length || disabled || uploading || isSharedView) return;
+    setUploading(true); onUploadingChange(true); showToast('正在处理图片…');
     try {
-      // Compress image to max 720px / 0.72 quality for high fidelity & compact storage
-      const resultUrl = await compressImageFile(file, 720, 0.72);
-      if (resultUrl) {
-        let next: MemoryPhoto[];
-        if (index === -1) {
-          next = [
-            ...photos,
-            {
-              id: `custom_${Date.now()}`,
-              title: "我们的美好瞬间",
-              subtitle: "",
-              date: "",
-              description: "这一刻的美好，被永远定格。",
-              url: resultUrl,
-              isCustomCover: true
-            }
-          ];
-        } else {
-          next = photos.map((p, idx) => (idx === index ? { ...p, url: resultUrl, isCustomCover: true } : p));
-        }
-
-        // Reset broken state for this index
-        if (index !== -1 && photos[index]) {
-          const pId = photos[index].id || index;
-          setBrokenImages(prev => ({ ...prev, [pId]: false }));
-        }
-
-        // 1. Update state
-        onPhotosChange(next);
-
-        // 2. Persist to IndexedDB & localStorage immediately
-        await saveCardToLocal(cardId, { id: cardId, photos: next });
-
-        // 3. Sync to API backend
-        fetch('/api/cards', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: cardId, photos: next })
-        }).catch((err) => console.warn('Cloud sync offline / warning:', err));
-
-        showToast('✨ 图片已成功保存！');
+      const batch: MemoryPhoto[] = [];
+      for (const file of (index === -1 ? files : files.slice(0, 1))) {
+        if (!file.type.startsWith('image/')) throw new Error('请选择图片文件');
+        const url = await compressImageFile(file, 720, 0.72);
+        batch.push({ id: 'custom_' + crypto.randomUUID(), title: '我们的美好瞬间',
+          subtitle: '', date: '', description: '这一刻的美好，被永远定格。', url, isCustomCover: true });
       }
-    } catch (err) {
-      console.error('Image compression failed:', err);
-      showToast('❌ 保存失败，请重试');
-    }
+      const next = index === -1 ? [...photos, ...batch] : photos.map((photo, i) =>
+        i === index ? { ...photo, url: batch[0].url, isCustomCover: true } : photo);
+      setBrokenImages({}); onPhotosChange(next); setSaveToast('');
+    } catch { showToast('图片处理失败，请重新选择'); }
+    finally { setUploading(false); onUploadingChange(false); }
   };
 
   const triggerUploadFor = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();
     playClickSound();
+    if (disabled || uploading || isSharedView) return;
     setUploadTargetIndex(index);
     if (fileInputRef.current) {
+      fileInputRef.current.multiple = index === -1;
       fileInputRef.current.value = '';
       fileInputRef.current.click();
     }
@@ -125,6 +93,7 @@ export default function PhotoEnvelope({
     if (e) e.stopPropagation();
     playClickSound();
 
+    if (disabled || uploading || isSharedView) return;
     const next = photos.filter((_, idx) => idx !== index);
     if (selectedPhotoIndex === index) {
       if (next.length === 0) {
@@ -137,27 +106,7 @@ export default function PhotoEnvelope({
     }
 
     onPhotosChange(next);
-    saveCardToLocal(cardId, { id: cardId, photos: next });
-    fetch('/api/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: cardId, photos: next })
-    }).catch(() => {});
-    showToast('🗑️ 已删除该相片');
-  };
-
-  const handleResetPhotos = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    playClickSound();
-    setBrokenImages({});
-    onPhotosChange(DEFAULT_MEMORY_PHOTOS);
-    saveCardToLocal(cardId, { id: cardId, photos: DEFAULT_MEMORY_PHOTOS });
-    fetch('/api/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: cardId, photos: DEFAULT_MEMORY_PHOTOS })
-    }).catch(() => {});
-    showToast('🔄 已恢复为预设相片');
+    showToast('已删除该相片，正在同步云端');
   };
 
   // Toggle Envelope open state
@@ -176,7 +125,7 @@ export default function PhotoEnvelope({
       return (
         <img
           src={photoUrl}
-          alt=""
+          alt={photo.title || '珍贵相片'}
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover"
           onError={() => {
@@ -208,11 +157,14 @@ export default function PhotoEnvelope({
 
   return (
     <div className="w-full bg-[#1A0829]/90 border-4 border-[#FFE8F5] p-4 sm:p-5 flex flex-col items-center gap-4 relative shadow-2xl">
+      {!isSharedView && <span role="status" className="text-[10px] text-[#FFE8F5]">{photoSaveStatus === 'saving' ? '照片保存中…' : photoSaveStatus === 'saved' ? '照片已保存到云端' : photoSaveStatus === 'error' ? '云端保存失败，请重试分享' : ''}</span>}
       {/* Hidden file input for custom image upload */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple={uploadTargetIndex === -1}
+        disabled={disabled || uploading}
         className="hidden"
         onChange={(e) => {
           if (uploadTargetIndex !== null) {
@@ -369,6 +321,8 @@ export default function PhotoEnvelope({
                           onClick={(e) => handleDeletePhoto(index, e)}
                           className="absolute -top-2 -right-2 w-6 h-6 bg-[#25103D] border-2 border-[#FFE8F5] text-[#FFE8F5] flex items-center justify-center cursor-pointer hover:bg-[#FF8FA3] hover:text-[#25103D] z-20 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 hover:opacity-100 transition-opacity shadow"
                           title="删除此照片"
+                          aria-label="删除照片"
+                          disabled={disabled || uploading}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -460,7 +414,7 @@ export default function PhotoEnvelope({
                     <p className="text-[9px] text-[#C9A9E9] font-pixel leading-relaxed">
                       {isSharedView
                         ? "信封里静悄悄的，暂未放入相片回忆。"
-                        : "您可以点击右侧「添加新照片」上传专属回忆，或随时点击下方「恢复预设插画」。"}
+                        : "您可以点击「添加照片（可多选）」一次上传多张专属回忆。"}
                     </p>
                   </div>
                 )}
@@ -478,7 +432,7 @@ export default function PhotoEnvelope({
                       <Plus className="w-5 h-5" />
                     </div>
                     <span className="text-[10px] text-[#7B5EA7] font-pixel font-bold group-hover:text-[#FF8FA3] transition-colors">
-                      添加新照片
+                      {uploading ? '正在处理图片…' : '添加照片（可多选）'}
                     </span>
                   </motion.div>
                 )}
@@ -495,17 +449,6 @@ export default function PhotoEnvelope({
                   <span>收起相片信盒</span>
                 </button>
 
-                {!isSharedView && (
-                  <button
-                    type="button"
-                    onClick={handleResetPhotos}
-                    className="px-3 py-2 bg-[#25103D] border-2 border-[#7B5EA7] text-[#C9A9E9] text-[9.5px] font-pixel hover:text-[#FFE8F5] hover:border-[#FFE8F5] active:translate-y-0.5 cursor-pointer shadow-md flex items-center gap-1"
-                    title="恢复为默认的插画相片"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>恢复预设插画</span>
-                  </button>
-                )}
               </div>
             </motion.div>
           )}

@@ -29,10 +29,12 @@ import PhotoEnvelope from './components/PhotoEnvelope';
 import MusicPlayer, { MusicPlayerRef } from './components/MusicPlayer';
 import PixelMascotCreator, { MascotConfig } from './components/PixelMascotCreator';
 import PixelBirthdayCake from './components/PixelBirthdayCake';
-import { BLESSING_THEMES, DEFAULT_BIRTHDAY_IMAGE, CLICK_SOUND_URL, DEFAULT_MEMORY_PHOTOS } from './data';
+import { BLESSING_THEMES, DEFAULT_BIRTHDAY_IMAGE, CLICK_SOUND_URL } from './data';
 import { MemoryPhoto } from './types';
 import { saveCardToLocal, loadCardFromLocal } from './utils/storage';
 import { getSeedCard } from './data/seedCards';
+import { normalizePhotos } from './photoState';
+import { enqueueCardSave } from './cardSaveQueue';
 
 interface IntroStar {
   id: number;
@@ -67,7 +69,7 @@ export default function App() {
       const paramId = urlParams.get('c') || urlParams.get('card');
       if (paramId) return paramId;
     }
-    return `c_${Date.now().toString(36)}`;
+    return 'c_' + crypto.randomUUID();
   });
 
   const seedCard = getSeedCard(currentCardId);
@@ -79,25 +81,40 @@ export default function App() {
   const [tempName, setTempName] = useState(() => seedCard?.name || '最特别的孩子');
   const [photos, setPhotos] = useState<MemoryPhoto[]>(() => {
     if (seedCard && Array.isArray(seedCard.photos)) {
-      return seedCard.photos;
+      return normalizePhotos(seedCard.photos);
     }
     return [];
   });
 
-  const isFirstRender = useRef(true);
-  const hasFetchedInitialData = useRef(false);
+  const [cardLoaded, setCardLoaded] = useState(false);
+  const [photosUploading, setPhotosUploading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState('');
+  const [sharing, setSharing] = useState(false);
+  const lastSnapshot = useRef('');
+  const saveRevision = useRef(0);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load saved card data from local storage (IndexedDB + localStorage) and server on initial mount
+  // 本地读取与云端读取按顺序执行；分享页不使用本机缓存覆盖云端。
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const cardId = urlParams.get('c') || urlParams.get('card') || 'latest';
-
-    if (!urlParams.get('c') && !urlParams.get('card')) {
+    const controller = new AbortController();
+    const params = new URLSearchParams(window.location.search);
+    const readId = params.get('c') || params.get('card') || 'latest';
+    const shared = params.get('s') === '1' || params.get('shared') === '1';
+    let legacyCard: any = null;
+    const encoded = params.get('d') || new URLSearchParams(window.location.hash.replace(/^#/, '')).get('d');
+    if (encoded) {
       try {
-        window.history.replaceState({}, '', `?c=${currentCardId}`);
-      } catch {}
+        const bytes = Uint8Array.from(atob(decodeURIComponent(encoded)), char => char.charCodeAt(0));
+        const decoded = JSON.parse(new TextDecoder().decode(bytes));
+        if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) legacyCard = decoded;
+      } catch { /* 无效历史内容不能替代云端卡片。 */ }
     }
-
+    if (shared) { setIntroSequence(false); setCurrentPage('envelope'); }
+    if (!params.get('c') && !params.get('card')) {
+      params.set('c', currentCardId);
+      window.history.replaceState({}, '', '?' + params.toString() + window.location.hash);
+    }
     const applyCardData = (card: any) => {
       if (!card) return;
       if (card.name) {
@@ -123,75 +140,38 @@ export default function App() {
       if (card.customSignature !== undefined) setCustomSignature(card.customSignature);
       if (card.customDate !== undefined) setCustomDate(card.customDate);
       if (card.customThemeNames !== undefined) setCustomThemeNames(card.customThemeNames);
-      if (Array.isArray(card.wishes) && card.wishes.length > 0) {
+      if (Array.isArray(card.wishes)) {
         setWishesList(card.wishes);
       }
       if (Array.isArray(card.photos)) {
-        setPhotos(card.photos);
+        setPhotos(normalizePhotos(card.photos));
       }
     };
 
-    // 0. Instant offline seed card fallback
-    if (seedCard) {
-      applyCardData(seedCard);
-    }
 
-    // 0.1 Zero-server cross-device payload fallback (reads encoded data if present)
-    const dParam = urlParams.get('d') || (window.location.hash ? new URLSearchParams(window.location.hash.replace(/^#/, '')).get('d') : null);
-    if (dParam) {
-      try {
-        const jsonStr = decodeURIComponent(escape(atob(decodeURIComponent(dParam))));
-        const decoded = JSON.parse(jsonStr);
-        applyCardData(decoded);
-        saveCardToLocal(currentCardId, decoded);
-      } catch (err) {
-        console.warn('URL payload decode error:', err);
+    const load = async () => {
+      if (seedCard) applyCardData(seedCard);
+      if (legacyCard) applyCardData(legacyCard);
+      if (!shared) {
+        const cached = await loadCardFromLocal(readId);
+        if (controller.signal.aborted) return;
+        if (cached) applyCardData(cached);
       }
-    }
-
-    // 1. Local-First Caching: Instantly load configuration from IndexedDB / localStorage
-    loadCardFromLocal(cardId).then((cached) => {
-      if (cached) {
-        applyCardData(cached);
+      const response = await fetch('/api/cards/' + encodeURIComponent(readId), { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('云端卡片读取失败，请检查数据库连接后刷新');
+      const data = await response.json() as { success?: boolean; card?: Record<string, any> | null };
+      if (!data?.success) throw new Error('服务器未确认卡片读取成功');
+      if (controller.signal.aborted) return;
+      if (data.card) {
+        applyCardData(data.card);
+        if (!shared) void saveCardToLocal(currentCardId, data.card);
+      } else if (shared && !seedCard && !legacyCard) {
+        throw new Error('分享卡片不存在，请让发送者重新保存并分享');
       }
-    }).catch(err => console.warn('Failed to parse local cache', err));
-
-    // 2. Fetch from cloud API
-    fetch(`/api/cards/${cardId}`)
-      .then(res => res.json())
-      .then((data: any) => {
-        if (data && data.success && data.card) {
-          applyCardData(data.card);
-          saveCardToLocal(currentCardId, data.card);
-        } else {
-          // Fallback to seed card if cloud returned empty
-          const fallback = getSeedCard(cardId);
-          if (fallback) {
-            applyCardData(fallback);
-            saveCardToLocal(currentCardId, fallback);
-          } else if (!urlParams.get('c') && !urlParams.get('card')) {
-            fetch('/api/cards/latest')
-              .then(r => r.json())
-              .then((latestData: any) => {
-                if (latestData && latestData.success && latestData.card) {
-                  applyCardData(latestData.card);
-                  saveCardToLocal(currentCardId, latestData.card);
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      })
-      .catch(err => {
-        console.log('Notice: using local / seed card fallback', err);
-        const fallback = getSeedCard(cardId);
-        if (fallback) {
-          applyCardData(fallback);
-        }
-      })
-      .finally(() => {
-        hasFetchedInitialData.current = true;
-      });
+      setCardLoaded(true);
+    };
+    load().catch(error => { if (!controller.signal.aborted) setSaveError(error instanceof Error ? error.message : '云端读取失败，请刷新'); });
+    return () => controller.abort();
   }, []);
 
   // Intro Landing Page customized Inputs & Retro loading states
@@ -320,48 +300,43 @@ export default function App() {
     clickAudioRef.current.play().catch(() => {});
   };
 
-  const handleShareLink = () => {
-    playClickSound();
-    
-    const cardId = currentCardId;
-    // Short, elegant, concise share URL without bulky encoded payload
-    const shareUrl = `${window.location.origin}${window.location.pathname}?c=${cardId}&s=1`;
-
-    let isCopied = false;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        navigator.clipboard.writeText(shareUrl);
-        isCopied = true;
-      } catch (err) {
-        console.warn('Clipboard write failed:', err);
-      }
-    }
-
-    setShareModal({ isOpen: true, url: shareUrl, copied: isCopied });
-
-    const cardPayload = {
-      id: cardId,
-      name: birthdayName,
-      age: birthdayAge,
-      photos: photos,
-      wishes: wishesList,
-      themeIndex: selectedThemeIndex,
-      activeMascotId,
-      mascotConfig,
-      customTitle,
-      customParagraphs,
-      customSignature,
-      customDate,
-      customThemeNames
-    };
-    
-    saveCardToLocal(cardId, cardPayload);
-
-    fetch('/api/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cardPayload)
-    }).catch(err => console.error('Failed to auto-sync card:', err));
+  const getCardId = () => {
+    if (currentCardId !== 'latest') return currentCardId;
+    const id = 'c_' + crypto.randomUUID();
+    setCurrentCardId(id);
+    const params = new URLSearchParams(window.location.search);
+    params.set('c', id); params.delete('card');
+    window.history.replaceState({}, '', '?' + params.toString());
+    return id;
+  };
+  const getCardPayload = (id: string) => ({
+    id, name: birthdayName, age: birthdayAge, photos, wishes: wishesList,
+    themeIndex: selectedThemeIndex, activeMascotId, mascotConfig,
+    customTitle, customParagraphs, customSignature, customDate, customThemeNames
+  });
+  const handleShareLink = async () => {
+    if (!cardLoaded || photosUploading || sharing) return;
+    playClickSound(); setSharing(true); setSaveError('');
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    try {
+      const id = getCardId();
+      const payload = getCardPayload(id);
+      void saveCardToLocal(id, payload);
+      await enqueueCardSave(id, payload);
+      const response = await fetch('/api/cards/' + encodeURIComponent(id), { cache: 'no-store' });
+      if (!response.ok) throw new Error('无法确认分享卡片，请重试');
+      const result = await response.json() as { success?: boolean; card?: Record<string, any> | null };
+      if (!result?.success || Object.entries(payload).some(([key, value]) => JSON.stringify(result.card?.[key]) !== JSON.stringify(value)))
+        throw new Error('服务器照片或文字与当前内容不一致，请重试');
+      const url = window.location.origin + window.location.pathname + '?c=' + encodeURIComponent(id) + '&s=1';
+      let copied = false;
+      try { await navigator.clipboard.writeText(url); copied = true; } catch {}
+      setSaveStatus('saved');
+      setShareModal({ isOpen: true, url, copied });
+    } catch (error) {
+      setSaveStatus('error');
+      setSaveError(error instanceof Error ? error.message : '分享保存失败，请重试');
+    } finally { setSharing(false); }
   };
 
   const handleStartIntro = () => {
@@ -546,46 +521,31 @@ export default function App() {
     }, 1200);
   };
 
-// Save state to server & local storage on user change
+  // 用户修改统一保存完整快照，读取本身不写回；照片组件不再独立提交。
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    // Protect against race condition: don't sync back if we haven't loaded the initial data yet!
-    if (!hasFetchedInitialData.current || isSharedView) {
-      return;
-    }
-
-    const cardId = currentCardId;
-
-    const cardPayload = {
-      id: cardId,
-      name: birthdayName,
-      age: birthdayAge,
-      photos: photos,
-      wishes: wishesList,
-      themeIndex: selectedThemeIndex,
-      activeMascotId: activeMascotId,
-      mascotConfig: mascotConfig,
-      customTitle,
-      customParagraphs,
-      customSignature,
-      customDate,
-      customThemeNames
-    };
-
-    // 1. Instantly save to IndexedDB & localStorage
-    saveCardToLocal(cardId, cardPayload);
-
-    // 2. Sync to cloud API
-    fetch('/api/cards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cardPayload)
-    }).catch(err => console.warn('Cloud sync offline / warning:', err));
-  }, [birthdayName, birthdayAge, wishesList, selectedThemeIndex, activeMascotId, mascotConfig, customTitle, customParagraphs, customSignature, customDate, customThemeNames, photos]);
+    if (!cardLoaded || isSharedView) return;
+    const snapshot = JSON.stringify(getCardPayload(''));
+    if (!lastSnapshot.current) { lastSnapshot.current = snapshot; return; }
+    if (lastSnapshot.current === snapshot) return;
+    lastSnapshot.current = snapshot;
+    const id = getCardId();
+    const payload = getCardPayload(id);
+    const revision = ++saveRevision.current;
+    void saveCardToLocal(id, payload);
+    setSaveStatus('saving'); setSaveError('');
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;
+      enqueueCardSave(id, payload)
+        .then(() => { if (revision === saveRevision.current) setSaveStatus('saved'); })
+        .catch(error => {
+          if (revision === saveRevision.current) {
+            setSaveStatus('error');
+            setSaveError(error instanceof Error ? error.message : '云端保存失败，请重试');
+          }
+        });
+    }, 800);
+    return () => { if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; } };
+  }, [cardLoaded, photos, birthdayName, birthdayAge, wishesList, selectedThemeIndex, activeMascotId, mascotConfig, customTitle, customParagraphs, customSignature, customDate, customThemeNames]);
 
     // Handles custom mascot interaction
   const triggerMascotPhrase = (id: string, phrase: string) => {
@@ -668,6 +628,8 @@ export default function App() {
         </div>
       </div>
 
+      {saveError && <div role="alert" className="fixed bottom-4 left-4 right-4 z-[80] p-3 bg-[#25103D] border-2 border-[#FF8FA3] text-xs text-[#FFE8F5]">{saveError}</div>}
+      {!isSharedView && <div role="status" className="fixed bottom-1 left-4 z-40 text-[10px] text-[#FFE8F5]">{!cardLoaded ? '正在读取云端卡片…' : saveStatus === 'saving' ? '正在保存到云端…' : saveStatus === 'saved' ? '已保存到云端' : ''}</div>}
       <AnimatePresence mode="wait">
         
         {/* Intro sequence: Star gathering scene / configuration gate & loading simulation */}
@@ -1568,7 +1530,9 @@ export default function App() {
                 birthdayAge={birthdayAge}
                 photos={photos}
                 onPhotosChange={setPhotos}
-                cardId={currentCardId}
+                disabled={!cardLoaded || sharing}
+                onUploadingChange={setPhotosUploading}
+                photoSaveStatus={saveStatus}
                 playClickSound={playClickSound}
                 wishesList={wishesList}
                 selectedThemeIndex={selectedThemeIndex}
@@ -1798,11 +1762,12 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleShareLink}
+                  disabled={!cardLoaded || sharing || photosUploading}
                   className="w-full py-4 bg-[#FF8FA3] border-4 border-[#FFE8F5] text-[#24133c] text-sm font-pixel font-bold tracking-wider hover:bg-white active:scale-[0.98] active:translate-y-1 cursor-pointer shadow-lg flex items-center justify-center gap-2 transition-transform duration-75 touch-manipulation select-none"
                   style={{ boxShadow: '0 6px 0 #7B5EA7' }}
                 >
                   <Share2 className="w-5 h-5" />
-                  <span>生成并复制专属分享链接 (SHARE LINK)</span>
+                  <span>{sharing ? '正在保存并确认分享…' : photosUploading ? '正在处理图片…' : '生成并复制专属分享链接 (SHARE LINK)'}</span>
                 </button>
               </motion.div>
             )}
@@ -1918,8 +1883,9 @@ export default function App() {
                       onClick={() => {
                         playClickSound();
                         if (navigator.clipboard && navigator.clipboard.writeText) {
-                          navigator.clipboard.writeText(shareModal.url);
-                          setShareModal(prev => ({ ...prev, copied: true }));
+                          navigator.clipboard.writeText(shareModal.url)
+                            .then(() => setShareModal(prev => ({ ...prev, copied: true })))
+                            .catch(() => setSaveError('复制失败，请手动复制链接'));
                         }
                       }}
                       className="w-full py-2.5 mt-2 bg-[#FF8FA3] border-2 border-[#FFE8F5] text-[#24133c] text-xs font-bold font-pixel cursor-pointer hover:bg-white active:translate-y-0.5 shadow-md flex items-center justify-center gap-1.5"
